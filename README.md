@@ -1,6 +1,8 @@
 # orca-mcp
 
 [![CI](https://github.com/jeff-roche/orca-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jeff-roche/orca-mcp/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/orca-mcp)](https://pypi.org/project/orca-mcp/)
+[![Python versions](https://img.shields.io/pypi/pyversions/orca-mcp)](https://pypi.org/project/orca-mcp/)
 
 An [MCP](https://modelcontextprotocol.io) server that wraps the **OrcaSlicer CLI**, letting any MCP compatible agent (Claude Code, Ollama, Codex, etc.) slice models, run parameter sweeps, and analyze the resulting G-code.
 
