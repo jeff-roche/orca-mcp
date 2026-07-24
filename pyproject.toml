@@ -1,0 +1,50 @@
+[project]
+name = "orca-mcp"
+version = "0.1.0"
+description = "MCP server that wraps the OrcaSlicer CLI: slice models, run parameter sweeps, and analyze G-code from any MCP client."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Jeff Roche", email = "jwroche44@gmail.com" }]
+keywords = ["mcp", "orcaslicer", "3d-printing", "slicer", "gcode"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Printing",
+]
+dependencies = [
+    "mcp>=1.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[project.scripts]
+orca-mcp = "orca_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/jeff-roche/orca-mcp"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orca_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["pkg/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

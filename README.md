@@ -1,16 +1,18 @@
-# orcaslicer-mcp
+# orca-mcp
 
-An [MCP](https://modelcontextprotocol.io) server that wraps the **OrcaSlicer CLI**, letting any MCP client (Claude Desktop, Claude Code, etc.) slice models, run parameter sweeps, and analyze the resulting G-code.
+[![CI](https://github.com/jeff-roche/orca-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jeff-roche/orca-mcp/actions/workflows/ci.yml)
+
+An [MCP](https://modelcontextprotocol.io) server that wraps the **OrcaSlicer CLI**, letting any MCP compatible agent (Claude Code, Ollama, Codex, etc.) slice models, run parameter sweeps, and analyze the resulting G-code.
 
 ```
-MCP client ──stdio──▶ orcaslicer-mcp ──subprocess──▶ orca-slicer CLI ──▶ G-code + estimates
+MCP client ──stdio──▶ orca-mcp ──subprocess──▶ orca-slicer CLI ──▶ G-code + estimates
 ```
 
 Works on **Linux, macOS, and Windows**, including Flatpak and AppImage installs of OrcaSlicer.
 
 ## Why
 
-The OrcaSlicer CLI can slice headlessly, but driving it by hand means juggling profile paths and grepping G-code comments. This server turns that into structured tools an AI agent can use: *"slice this disc with fan speeds of 20/40/60% and tell me which layers at the shoulder transition change"* becomes a two-tool-call workflow.
+The OrcaSlicer CLI can slice headlessly, but driving it by hand means juggling profile paths and grepping G-code comments. This server turns that into structured tools an AI agent can use: *"slice this model with fan speeds of 20/40/60% and tell me which layers at the shoulder transition change"* becomes a two-tool-call workflow.
 
 ## Requirements
 
@@ -21,10 +23,10 @@ The OrcaSlicer CLI can slice headlessly, but driving it by hand means juggling p
 ## Install
 
 ```bash
-pip install orcaslicer-mcp        # once published
+pip install orca-mcp        # once published
 # or from source:
-git clone https://github.com/CHANGEME/orcaslicer-mcp
-cd orcaslicer-mcp && pip install .
+git clone https://github.com/jeff-roche/orca-mcp
+cd orca-mcp && pip install .
 ```
 
 ## Configure your MCP client
@@ -34,8 +36,8 @@ cd orcaslicer-mcp && pip install .
 ```json
 {
   "mcpServers": {
-    "orcaslicer": {
-      "command": "orcaslicer-mcp"
+    "orca-mcp": {
+      "command": "orca-mcp"
     }
   }
 }
@@ -46,8 +48,8 @@ If OrcaSlicer isn't on your PATH, point the server at it:
 ```json
 {
   "mcpServers": {
-    "orcaslicer": {
-      "command": "orcaslicer-mcp",
+    "orca-mcp": {
+      "command": "orca-mcp",
       "env": {
         "ORCASLICER_PATH": "/home/you/Applications/OrcaSlicer_Linux_V2.3.0.AppImage"
       }
@@ -87,6 +89,87 @@ Only *user* profiles are enumerated by `list_profiles`. Vendor/system presets st
 | `get_slice_estimates` | Parse time/filament/settings out of an existing G-code file |
 | `analyze_gcode_layers` | Per-layer fan %, speed range, feature types — Z-windowable |
 
+### Tool reference
+
+#### `check_installation()`
+
+No arguments. Returns the resolved executable/invocation, platform, and version banner. Call this first if any other tool fails unexpectedly.
+
+#### `list_profiles(profile_type=None)`
+
+| Arg | Type | Default | Description |
+|---|---|---|---|
+| `profile_type` | `str \| None` | `None` | Filter: `"machine"`, `"process"`, or `"filament"`. Omit to list all three. |
+
+Returns `{"count", "profiles", "note"}`. Only user profiles are listed — see [How profiles are located](#how-profiles-are-located).
+
+#### `get_profile(name_or_path, profile_type)`
+
+| Arg | Type | Description |
+|---|---|---|
+| `name_or_path` | `str` | Profile name (user profile) or path to a profile JSON. |
+| `profile_type` | `str` | `"machine"`, `"process"`, or `"filament"`. |
+
+Returns `{"profile", "settings"}` — `settings` is the full profile JSON, useful for finding valid `process_overrides`/`filament_overrides` keys.
+
+#### `get_model_info(model_path)`
+
+| Arg | Type | Description |
+|---|---|---|
+| `model_path` | `str` | Path to an STL/3MF/OBJ/STEP model. |
+
+Runs OrcaSlicer's `--info` and returns bounding box, volume, and facet count.
+
+#### `slice_model(...)`
+
+| Arg | Type | Default | Description |
+|---|---|---|---|
+| `model_path` | `str` | — | Path to STL/3MF/OBJ/STEP file. |
+| `machine_profile` | `str` | — | Machine profile name or JSON path. |
+| `process_profile` | `str` | — | Process (print settings) profile name or JSON path. |
+| `filament_profile` | `str` | — | Filament profile name or JSON path. |
+| `process_overrides` | `dict \| None` | `None` | Process settings to override, e.g. `{"wall_loops": 4}`. See [Overrides](#overrides). |
+| `filament_overrides` | `dict \| None` | `None` | Filament settings to override, e.g. `{"fan_cooling_layer_time": 12}`. |
+| `output_dir` | `str \| None` | system temp / `orca-mcp` | Where to put the sliced G-code. |
+| `plate` | `int` | `1` | Plate index to slice; `0` slices all plates. |
+| `timeout_seconds` | `int` | `600` | Kill the slice if it exceeds this. |
+
+Returns G-code path(s) plus parsed estimates (`{"output_dir", "gcode_files", "profiles_used", "estimates", ...}`).
+
+#### `parameter_sweep(...)`
+
+| Arg | Type | Default | Description |
+|---|---|---|---|
+| `model_path` | `str` | — | Path to the model file. |
+| `machine_profile` / `process_profile` / `filament_profile` | `str` | — | As in `slice_model`. |
+| `sweep_parameter` | `str` | — | Setting key to vary, e.g. `"fan_max_speed"`. |
+| `sweep_values` | `list` | — | Values to try, e.g. `[20, 40, 60, 80]`. Max 12. |
+| `parameter_target` | `str` | `"process"` | `"process"` or `"filament"` — which profile the parameter belongs to. |
+| `output_dir` | `str \| None` | system temp / `orca-mcp` | Base output directory. |
+| `plate` | `int` | `1` | Plate index. |
+| `timeout_seconds` | `int` | `600` | Per-slice timeout. |
+
+Slices once per value and returns one entry per value (`"runs"`) plus a flattened `"comparison"` table of time/filament, so results can be diffed — e.g. by feeding each G-code path to `analyze_gcode_layers`.
+
+#### `get_slice_estimates(gcode_path)`
+
+| Arg | Type | Description |
+|---|---|---|
+| `gcode_path` | `str` | Path to a `.gcode` file produced by OrcaSlicer. |
+
+Parses print time, filament usage, and key settings out of the G-code header comments.
+
+#### `analyze_gcode_layers(gcode_path, z_min=None, z_max=None, max_layers=300)`
+
+| Arg | Type | Default | Description |
+|---|---|---|---|
+| `gcode_path` | `str` | — | Path to a `.gcode` file. |
+| `z_min` | `float \| None` | `None` | Only include layers at or above this Z (mm). |
+| `z_max` | `float \| None` | `None` | Only include layers at or below this Z (mm). |
+| `max_layers` | `int` | `300` | Cap on returned layers. |
+
+Returns per-layer Z, layer height, feature types, fan speed, and print speed range — useful for inspecting a specific region (e.g. an overhang) and comparing across sweep runs.
+
 ### Overrides
 
 `slice_model` accepts `process_overrides` and `filament_overrides` dicts. Keys are OrcaSlicer's internal setting names — run `get_profile` on your process profile to see them. The server merges overrides into a temp copy of the profile (handling Orca's string/list-of-strings value convention) and passes that to the CLI, so your saved profiles are never modified.
@@ -106,10 +189,10 @@ Only *user* profiles are enumerated by `list_profiles`. Vendor/system presets st
 ### Example agent workflows
 
 **Basic slice + estimate:**
-> "Slice `disc.stl` with my TPU profiles and tell me the print time and filament weight."
+> "Slice `mdoel.stl` with my TPU profiles and tell me the print time and filament weight."
 
 **Parameter sweep:**
-> "Sweep `fan_max_speed` over 20, 40, 60, 80 on `disc.stl` and compare print times."
+> "Sweep `fan_max_speed` over 20, 40, 60, 80 on `model.stl` and compare print times."
 
 **Regional G-code inspection:**
 > "For each sweep result, analyze layers between Z=8mm and Z=12mm and tell me where fan speed and print speed diverge."
@@ -130,11 +213,12 @@ Only *user* profiles are enumerated by `list_profiles`. Vendor/system presets st
 ## Development
 
 ```bash
-pip install -e ".[dev]"    # or just: pip install -e . pytest
+pip install -e ".[dev]"    # installs pytest + ruff
 pytest
+ruff check .
 ```
 
-The test suite covers G-code parsing, layer analysis, profile discovery, and override merging with synthetic fixtures — no OrcaSlicer install needed to run it.
+The test suite covers G-code parsing, layer analysis, profile discovery, and override merging with synthetic fixtures — no OrcaSlicer install needed to run it. Both `pytest` and `ruff check` run in CI on every push/PR (`.github/workflows/ci.yml`).
 
 ## License
 
