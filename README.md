@@ -23,7 +23,8 @@ The OrcaSlicer CLI can slice headlessly, but driving it by hand means juggling p
 ## Install
 
 ```bash
-pip install orca-mcp        # once published
+pip install orca-mcp
+
 # or from source:
 git clone https://github.com/jeff-roche/orca-mcp
 cd orca-mcp && pip install .
